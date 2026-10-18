@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jellybean.io — eat beans, eat rivals, don't get eaten</title>
+<meta name="description" content="jellybean.io: a cartoon arena game. Eat jellybeans to grow, eat smaller rivals, dodge bigger ones — four ways to play, right in your browser.">
+<meta name="theme-color" content="#fad6e3">
+<meta property="og:title" content="jellybean.io">
+<meta property="og:description" content="Eat beans, eat rivals, don't get eaten. Play free in your browser.">
+<meta property="og:image" content="art/poster.webp">
+<link rel="icon" type="image/png" href="index.icon.png">
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png">
+<script>window.JB_GZ = true;</script>
+<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+
+<style>
+@font-face { font-family: "Luckiest Guy"; src: url("fonts/LuckiestGuy.woff2") format("woff2"), url("fonts/LuckiestGuy.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Nunito"; src: url("fonts/Nunito.woff2") format("woff2"), url("fonts/Nunito.ttf") format("truetype"); font-weight: 200 1000; font-display: swap; }
+
+:root {
+	--pink: #fad6e3;
+	--grid: #f3c4d5;
+	--ink: #221b1b;
+	--paper: #fffaf2;
+	--lime: #2bd16b;
+	--lime-deep: #1c9a4c;
+	--grape: #7b61ff;
+	--grape-deep: #5640c9;
+	--sun: #ffc83d;
+	--muted: #6e5d63;
+	--classic: #2bd16b;
+	--survivor: #ff7a45;
+	--infection: #7cc242;
+	--hide: #7b61ff;
+	--display: "Luckiest Guy", "Arial Rounded MT Bold", system-ui, sans-serif;
+	--body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+	margin: 0;
+	color: var(--ink);
+	font: 600 1.0625rem/1.55 var(--body);
+	background-color: var(--pink);
+	/* the arena's floor grid, in bubblegum */
+	background-image:
+		linear-gradient(var(--grid) 2px, transparent 2px),
+		linear-gradient(90deg, var(--grid) 2px, transparent 2px);
+	background-size: 56px 56px;
+	background-position: -2px -2px;
+}
+img { max-width: 100%; display: block; }
+a { color: var(--grape-deep); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 4px solid var(--grape); outline-offset: 3px; border-radius: 12px; }
+
+/* the shouty face, with the game's ink outline and hard shadow */
+.shout {
+	font-family: var(--display);
+	font-weight: 400;
+	letter-spacing: 0.01em;
+	color: #fff;
+	text-shadow:
+		-2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+		0 -2.6px 0 var(--ink), 0 2.6px 0 var(--ink), -2.6px 0 0 var(--ink), 2.6px 0 0 var(--ink),
+		0 6px 0 var(--ink);
+}
+
+.wrap { width: min(1180px, 100% - 32px); margin-inline: auto; }
+
+/* ---------------------------------------------------------------- header */
+.top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding-block: 18px 6px;
+}
+.top img { width: clamp(220px, 34vw, 400px); height: auto; filter: drop-shadow(0 3px 0 rgba(34, 27, 27, 0.18)); }
+.top nav { display: flex; gap: 22px; font-weight: 800; font-size: 1rem; }
+.top nav a { color: var(--ink); text-decoration: none; }
+.top nav a:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------------- the stage */
+.stage-row { position: relative; margin-top: 10px; }
+.stage {
+	position: relative;
+	aspect-ratio: 16 / 10;
+	max-height: calc(100vh - 150px);
+	min-height: 360px;
+	margin-inline: auto;
+	border: 5px solid var(--ink);
+	border-radius: 28px;
+	background: #f6ede2;
+	box-shadow: 0 9px 0 var(--ink);
+	overflow: hidden;
+	isolation: isolate;
+}
+.stage canvas {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	display: block;
+	outline: none;
+	touch-action: none;
+	visibility: hidden;
+}
+.stage.running canvas { visibility: visible; }
+.stage:fullscreen { border: 0; border-radius: 0; box-shadow: none; max-height: none; aspect-ratio: auto; width: 100vw; height: 100vh; }
+.stage:-webkit-full-screen { border: 0; border-radius: 0; max-height: none; width: 100vw; height: 100vh; }
+
+.poster {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	text-align: center;
+	padding: 24px;
+	background:
+		radial-gradient(ellipse 60% 55% at 50% 52%, rgba(255, 250, 242, 0.9), rgba(255, 250, 242, 0.6) 60%, rgba(250, 214, 227, 0.88) 100%),
+		url("art/poster.webp") center / cover no-repeat;
+	z-index: 2;
+}
+.stage.running .poster { display: none; }
+.poster-inner { display: grid; justify-items: center; gap: 18px; }
+.poster h1 { margin: 0; font-size: clamp(1.6rem, 3.6vw, 2.9rem); line-height: 1.1; text-wrap: balance; }
+.poster h1 span { display: block; }
+.poster h1 span + span { color: var(--sun); }
+
+/* what's new, stuck on the corner of the screen */
+.poster .sticker {
+	position: absolute;
+	top: 20px;
+	left: 20px;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	max-width: calc(100% - 40px);
+	text-align: left;
+	white-space: nowrap;
+	padding: 7px 14px 6px 8px;
+	border: 4px solid var(--ink);
+	border-radius: 16px;
+	background: var(--paper);
+	box-shadow: 0 5px 0 var(--ink);
+	transform: rotate(-3deg);
+	font-weight: 800;
+	font-size: 0.95rem;
+	line-height: 1.25;
+}
+.poster .sticker b {
+	flex: none;
+	padding: 4px 9px 1px;
+	border: 3px solid var(--ink);
+	border-radius: 10px;
+	background: var(--sun);
+	font: 400 1rem/1.2 var(--display);
+	letter-spacing: 0.03em;
+}
+.poster p { margin: 0; color: var(--ink); font-weight: 700; max-width: 40ch; }
+
+.play {
+	appearance: none;
+	border: 5px solid var(--ink);
+	border-radius: 999px;
+	background: var(--lime);
+	color: #fff;
+	font: 400 clamp(2rem, 5vw, 3.4rem)/1 var(--display);
+	padding: 0.42em 1.5em 0.3em;
+	box-shadow: inset 0 -9px 0 var(--lime-deep), 0 8px 0 var(--ink);
+	cursor: pointer;
+	text-shadow: -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 4px 0 var(--ink);
+	transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.play:hover { transform: translateY(-3px) rotate(-1.5deg); box-shadow: inset 0 -9px 0 var(--lime-deep), 0 11px 0 var(--ink); }
+.play:active { transform: translateY(5px); box-shadow: inset 0 -5px 0 var(--lime-deep), 0 3px 0 var(--ink); }
+
+.chip-btn {
+	appearance: none;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	border: 4px solid var(--ink);
+	border-radius: 999px;
+	background: var(--paper);
+	color: var(--ink);
+	font: 800 1rem/1 var(--body);
+	padding: 10px 18px;
+	box-shadow: 0 5px 0 var(--ink);
+	cursor: pointer;
+	transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.chip-btn:hover { transform: translateY(-2px); box-shadow: 0 7px 0 var(--ink); }
+.chip-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+.chip-btn svg { width: 20px; height: 20px; }
+.chip-btn.grape { background: var(--grape); color: #fff; }
+
+.loading { display: none; width: min(460px, 80%); gap: 12px; justify-items: center; }
+.stage.loading-now .loading { display: grid; }
+.stage.loading-now .start { display: none; }
+.jar {
+	position: relative;
+	width: 100%;
+	height: 34px;
+	border: 4px solid var(--ink);
+	border-radius: 999px;
+	background: var(--paper);
+	overflow: hidden;
+	box-shadow: 0 5px 0 var(--ink);
+}
+.jar span {
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 0%;
+	/* jellybeans, row on row */
+	background:
+		radial-gradient(ellipse 9px 6px at 12px 9px, #ff5c8a 96%, transparent),
+		radial-gradient(ellipse 9px 6px at 32px 20px, #45c4ff 96%, transparent),
+		radial-gradient(ellipse 9px 6px at 22px 6px, #ffd23f 96%, transparent),
+		radial-gradient(ellipse 9px 6px at 4px 22px, #7cc242 96%, transparent),
+		#b46bff;
+	background-size: 40px 28px;
+	transition: width 200ms linear;
+}
+.loading-text { font-weight: 800; }
+.notice { display: none; max-width: 46ch; background: var(--paper); border: 4px solid var(--ink); border-radius: 18px; padding: 14px 18px; box-shadow: 0 5px 0 var(--ink); font-weight: 700; }
+.stage.failed .notice { display: block; }
+.stage.failed .start, .stage.failed .loading { display: none; }
+
+.toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px 24px;
+	margin-top: 26px;
+}
+.keys { display: flex; flex-wrap: wrap; gap: 10px 20px; margin: 0; padding: 0; list-style: none; font-weight: 700; }
+.keys li { display: flex; align-items: center; gap: 8px; }
+kbd {
+	display: inline-block;
+	min-width: 2.2em;
+	padding: 3px 9px 1px;
+	border: 3px solid var(--ink);
+	border-radius: 9px;
+	background: #fff;
+	box-shadow: 0 3px 0 var(--ink);
+	font: 400 0.95rem/1.3 var(--display);
+	text-align: center;
+}
+
+/* beans peeking over the frame, like stickers on a console */
+.peek { position: absolute; pointer-events: none; z-index: 3; width: clamp(80px, 9vw, 128px); }
+.peek.one { left: -46px; top: 44%; transform: rotate(-12deg); }
+.peek.two { right: -40px; top: -48px; transform: rotate(9deg); }
+.peek.three { right: -44px; top: 64%; transform: rotate(-8deg); width: clamp(70px, 7vw, 104px); }
+@media (max-width: 1260px) { .peek { display: none; } }
+
+/* ---------------------------------------------------------------- the rest of the page */
+main section { margin-top: 96px; }
+h2 { margin: 0 0 18px; font-size: clamp(1.9rem, 3.4vw, 2.6rem); line-height: 1.05; }
+h3 { margin: 0 0 6px; font: 400 1.5rem/1.1 var(--display); }
+p { margin: 0 0 12px; }
+.lede { max-width: 62ch; color: var(--muted); font-weight: 700; }
+
+.how { display: grid; grid-template-columns: 1fr 1.1fr; gap: 40px; align-items: center; }
+.rules { margin: 0; padding: 0; list-style: none; display: grid; gap: 16px; }
+.rules li { display: grid; grid-template-columns: 38px 1fr; gap: 14px; align-items: start; }
+.rules li::before {
+	content: "";
+	width: 34px; height: 24px; margin-top: 3px;
+	border: 3px solid var(--ink);
+	border-radius: 50%;
+	background: var(--bean, var(--lime));
+	transform: rotate(-18deg);
+	box-shadow: inset -4px -4px 0 rgba(0, 0, 0, 0.12), inset 4px 3px 0 rgba(255, 255, 255, 0.45);
+}
+.rules li:nth-child(2) { --bean: #ff5c8a; }
+.rules li:nth-child(3) { --bean: #45c4ff; }
+.rules li:nth-child(4) { --bean: var(--sun); }
+.rules strong { font-weight: 900; }
+.shot {
+	border: 5px solid var(--ink);
+	border-radius: 22px;
+	box-shadow: 0 8px 0 var(--ink);
+	overflow: hidden;
+	background: #f6ede2;
+}
+.shot img { width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; }
+
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+.mode {
+	--tint: var(--classic);
+	display: grid;
+	grid-template-rows: auto 1fr;
+	border: 5px solid var(--ink);
+	border-radius: 22px;
+	background: var(--paper);
+	box-shadow: 0 8px 0 var(--ink);
+	overflow: hidden;
+}
+.mode img { aspect-ratio: 16 / 11; object-fit: cover; width: 100%; border-bottom: 5px solid var(--ink); }
+.mode div { padding: 14px 16px 18px; border-top: 10px solid var(--tint); margin-top: -5px; }
+.mode h3 { color: var(--tint); text-shadow: -1.5px -1.5px 0 var(--ink), 1.5px -1.5px 0 var(--ink), -1.5px 1.5px 0 var(--ink), 1.5px 1.5px 0 var(--ink), 0 3px 0 var(--ink); }
+.mode p { margin: 0; font-size: 0.98rem; }
+.mode { transition: transform 160ms ease, box-shadow 160ms ease; }
+.mode:hover { transform: translateY(-4px) rotate(-0.6deg); box-shadow: 0 12px 0 var(--ink); }
+.mode:nth-child(even):hover { transform: translateY(-4px) rotate(0.6deg); }
+.mode.survivor { --tint: var(--survivor); }
+.mode.infection { --tint: var(--infection); }
+.mode.hide { --tint: var(--hide); }
+
+.collect { display: grid; grid-template-columns: 1.15fr 1fr; gap: 40px; align-items: center; }
+.collect .rules { margin-bottom: 8px; }
+
+.faq { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px 24px; }
+.faq > div { padding: 16px 20px 6px; border: 4px solid var(--ink); border-radius: 18px; background: var(--paper); box-shadow: 0 6px 0 var(--ink); }
+.faq h3 { font: 900 1.12rem/1.3 var(--body); margin-bottom: 4px; }
+.faq p { color: var(--muted); font-weight: 700; }
+
+footer { margin-top: 100px; padding: 28px 0 40px; border-top: 4px solid var(--ink); display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; justify-content: space-between; font-weight: 700; color: var(--muted); }
+footer img { width: 150px; height: auto; }
+footer span { flex: 1 1 320px; text-align: center; }
+footer .chip-btn { text-decoration: none; }
+
+@media (max-width: 900px) {
+	.how, .collect { grid-template-columns: 1fr; }
+	.modes { grid-template-columns: repeat(2, 1fr); }
+	.top nav { display: none; }
+}
+@media (max-width: 560px) {
+	.modes, .faq { grid-template-columns: 1fr; }
+	.stage { aspect-ratio: 4 / 5; }
+	/* on a phone the sticker joins the stack above the headline instead of crowding it */
+	.poster { align-content: center; gap: 16px; }
+	.poster .sticker { position: static; max-width: 100%; font-size: 0.85rem; white-space: normal; transform: rotate(-2deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	* { transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* served by a game that's HOSTing: just the game, the whole window */
+body.host { background: var(--pink); overflow: hidden; }
+body.host .top, body.host .toolbar, body.host main, body.host footer, body.host .peek { display: none; }
+body.host .wrap { width: 100%; }
+body.host .stage-row { margin: 0; }
+body.host .stage { width: 100vw; height: 100vh; max-height: none; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+	<header class="top">
+		<a href="#" aria-label="jellybean.io home"><img src="art/logo.png" alt="jellybean.io" width="654" height="156"></a>
+		<nav aria-label="On this page">
+			<a href="#how">How to play</a>
+			<a href="#modes">Modes</a>
+			<a href="#faq">Good to know</a>
+		</nav>
+	</header>
+
+	<div class="stage-row">
+		<img class="peek one" src="art/bean-duck.png" alt="" loading="lazy">
+		<img class="peek two" src="art/bean-pink.png" alt="" loading="lazy">
+		<img class="peek three" src="art/bean-blue.png" alt="" loading="lazy">
+		<div class="stage" id="stage">
+			<canvas id="canvas" tabindex="0" aria-label="jellybean.io game"></canvas>
+			<div class="poster" id="poster">
+				<p class="sticker"><b>New</b> Trails, victory poses and the collection book</p>
+				<div class="poster-inner">
+					<h1 class="shout"><span>Eat beans. Eat rivals.</span> <span>Don't get eaten.</span></h1>
+					<div class="start poster-inner">
+						<button class="play" id="play" type="button">Play</button>
+						<button class="chip-btn" id="play-full" type="button">
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+							Play full screen
+						</button>
+						<p>The first load is about 17 MB. Your progress saves in this browser.</p>
+					</div>
+					<div class="loading" role="status" aria-live="polite">
+						<div class="jar" aria-hidden="true"><span id="jar"></span></div>
+						<div class="loading-text" id="loading-text">Filling the jar…</div>
+					</div>
+					<div class="notice" id="notice" role="alert"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="toolbar">
+		<ul class="keys" aria-label="Controls">
+			<li><kbd>Mouse</kbd> steer</li>
+			<li><kbd>Space</kbd> dash</li>
+			<li><kbd>F</kbd> use a power-up</li>
+			<li><kbd>P</kbd> pause</li>
+		</ul>
+		<button class="chip-btn grape" id="full" type="button">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+			<span id="full-label">Full screen</span>
+		</button>
+	</div>
+
+	<main>
+		<section id="how" class="how">
+			<div>
+				<h2 class="shout">How to play</h2>
+				<ul class="rules">
+					<li><span><strong>Steer with your mouse.</strong> Point near your bean to creep, far away to run flat out.</span></li>
+					<li><span><strong>Eat to grow.</strong> Jellybeans on the floor make you bigger. Any bean smaller than you is food — anything bigger, run.</span></li>
+					<li><span><strong>Dash and grab power-ups.</strong> Space lunges forward. Power-ups give you speed, shields, magnets and bombs; F throws what you're holding.</span></li>
+					<li><span><strong>Be the last bean standing.</strong> Wins pay coins and gems for chests, skins, trails and victory poses.</span></li>
+				</ul>
+			</div>
+			<div class="shot"><img src="art/arena.webp" alt="A match in progress: beans of every size and colour on the arena floor, with trails behind them" loading="lazy" width="960" height="600"></div>
+		</section>
+
+		<section id="modes">
+			<h2 class="shout">Four ways to play</h2>
+			<p class="lede">Pick a mode with the arrows under your bean on the home screen.</p>
+			<div class="modes">
+				<article class="mode">
+					<img src="art/classic.webp" alt="Classic mode" loading="lazy" width="480" height="330">
+					<div><h3>Classic</h3><p>Eat beans, eat rivals, be the last bean standing — with random arena events like jellybean rain and giant gumballs.</p></div>
+				</article>
+				<article class="mode survivor">
+					<img src="art/survivor.webp" alt="Survivor mode" loading="lazy" width="480" height="330">
+					<div><h3>Survivor</h3><p>Survive 20 waves of angry gummies. Your weapons fire by themselves — you pick the upgrades.</p></div>
+				</article>
+				<article class="mode infection">
+					<img src="art/infection.webp" alt="Infection mode" loading="lazy" width="480" height="330">
+					<div><h3>Infection</h3><p>One bean is a zombie — maybe you. Tag everyone, or outrun them until the clock runs out.</p></div>
+				</article>
+				<article class="mode hide">
+					<img src="art/hide.webp" alt="Hide and seek mode" loading="lazy" width="480" height="330">
+					<div><h3>Hide &amp; Seek</h3><p>Lights out. Hide in bushes and vents, or be the seeker with a flashlight and find them all.</p></div>
+				</article>
+			</div>
+		</section>
+
+		<section class="collect">
+			<div class="shot"><img src="art/collection.webp" alt="The collection book with sets of skins, trails and poses" loading="lazy" width="960" height="600"></div>
+			<div>
+				<h2 class="shout">Collect it all</h2>
+				<ul class="rules">
+					<li><span><strong>Skins, hats, patterns and colours</strong> from treasure chests.</span></li>
+					<li><span><strong>Trails</strong> that follow you round the arena, and <strong>victory poses</strong> for when you win.</span></li>
+					<li><span><strong>Challenges</strong> unlock the rarest items by skill, never by luck — a win streak, a win without dashing, ten wins.</span></li>
+					<li><span><strong>Sets</strong> of four themed items pay out gems when you finish them. The collection book keeps score.</span></li>
+				</ul>
+			</div>
+		</section>
+
+		<section id="faq">
+			<h2 class="shout">Good to know</h2>
+			<div class="faq">
+				<div><h3>Does my progress save?</h3><p>Yes, in this browser on this computer. Make an account in the game, or play as a guest. Clearing your browser's data clears it too.</p></div>
+				<div><h3>How does full screen work?</h3><p>Press the full screen button under the game. Esc leaves full screen (in Chrome, hold it — a quick press pauses the game). P pauses too.</p></div>
+				<div><h3>Which browsers work?</h3><p>Chrome, Edge, Firefox and Safari, on a laptop or desktop. A mouse and keyboard work best.</p></div>
+				<div><h3>Can we play together?</h3><p>This page plays offline against bots. Playing online with friends needs someone running the game's server — the desktop version can host one.</p></div>
+				<div><h3>It's stuck loading.</h3><p>The first load downloads the whole game. On a slow network give it a minute, then reload the page. After that it loads faster.</p></div>
+				<div><h3>It's running slowly.</h3><p>Close other tabs, then open the game's settings (the gear on the home screen) and turn off High detail and Smooth edges.</p></div>
+			</div>
+		</section>
+	</main>
+
+	<footer>
+		<img src="art/logo.png" alt="jellybean.io" width="654" height="156" loading="lazy">
+		<span>Made by ANi_ with the Godot engine. Fonts: Luckiest Guy (Apache 2.0), Nunito and Lilita One (SIL OFL).</span>
+		<a class="chip-btn" href="#">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+			Back to the game
+		</a>
+	</footer>
+</div>
+
+<script>
+// GitHub Pages can't take files over 25 MB through its web uploader, and school networks are
+// slow: the game's two big files ship gzipped (index.wasm.gz, index.pck.gz) and are unpacked
+// here as they download. Only on the published page (the build marks it) and only where the
+// browser can unpack; anywhere else the files are fetched as they are.
+(function () {
+	if (!window.JB_GZ || typeof DecompressionStream === 'undefined') {
+		return;
+	}
+	const plain = window.fetch.bind(window);
+	window.fetch = async function (input, init) {
+		const url = typeof input === 'string' ? input : (input && input.url) || '';
+		const m = url.match(/^(.*\.(wasm|pck))(\?.*)?$/);
+		if (!m) {
+			return plain(input, init);
+		}
+		const res = await plain(m[1] + '.gz' + (m[3] || ''), init);
+		if (!res.ok || !res.body) {
+			return plain(input, init);
+		}
+		// some hosts unpack .gz themselves: look at the first bytes before unpacking again
+		const [peek, rest] = res.body.tee();
+		const reader = peek.getReader();
+		const first = await reader.read();
+		reader.cancel();
+		const gz = first.value && first.value.length > 1 && first.value[0] === 0x1f && first.value[1] === 0x8b;
+		const body = gz ? rest.pipeThrough(new DecompressionStream('gzip')) : rest;
+		return new Response(body, { status: 200, headers: { 'Content-Type': m[2] === 'wasm' ? 'application/wasm' : 'application/octet-stream' } });
+	};
+}());
+</script>
+<script src="index.js"></script>
+<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":7410240,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+
+(function () {
+	const stage = document.getElementById('stage');
+	const canvas = document.getElementById('canvas');
+	const jar = document.getElementById('jar');
+	const loadingText = document.getElementById('loading-text');
+	const notice = document.getElementById('notice');
+	const fullLabel = document.getElementById('full-label');
+	const hosted = typeof window.jellybeanHost !== 'undefined';
+	if (hosted) {
+		document.body.classList.add('host');
+	}
+
+	// The page decides the canvas size (policy 0): its box, in device pixels. The game works in
+	// points and follows the pixel ratio itself.
+	function fit() {
+		const r = canvas.getBoundingClientRect();
+		const dpr = window.devicePixelRatio || 1;
+		const w = Math.max(1, Math.round(r.width * dpr));
+		const h = Math.max(1, Math.round(r.height * dpr));
+		if (canvas.width !== w || canvas.height !== h) {
+			canvas.width = w;
+			canvas.height = h;
+		}
+	}
+	new ResizeObserver(fit).observe(canvas);
+	window.addEventListener('resize', fit);
+	fit();
+
+	let engine = null;
+	let started = false;
+
+	function fail(text) {
+		notice.textContent = text;
+		stage.classList.remove('loading-now');
+		stage.classList.add('failed');
+	}
+
+	function start() {
+		if (started) {
+			canvas.focus();
+			return;
+		}
+		started = true;
+		const missing = Engine.getMissingFeatures({ threads: GODOT_THREADS_ENABLED });
+		if (missing.length !== 0) {
+			fail('This browser can\'t run the game (missing: ' + missing.join(', ') + '). Try the newest Chrome, Edge or Firefox.');
+			return;
+		}
+		stage.classList.add('loading-now');
+		fit();
+		engine = new Engine(Object.assign({}, GODOT_CONFIG, { canvas: canvas, canvasResizePolicy: 0 }));
+		engine.startGame({
+			onProgress: function (current, total) {
+				if (total > 0) {
+					const pct = Math.min(100, Math.round(current / total * 100));
+					jar.style.width = pct + '%';
+					loadingText.textContent = pct < 100 ? 'Filling the jar… ' + pct + '%' : 'Almost there…';
+				}
+			},
+		}).then(function () {
+			stage.classList.remove('loading-now');
+			stage.classList.add('running');
+			fit();
+			canvas.focus();
+		}, function (err) {
+			console.error(err);
+			fail('The game didn\'t load. Check your connection and reload the page.');
+		});
+	}
+
+	// Full screen: the whole stage, so the game fills the screen. While it's full screen, Esc goes
+	// to the game (hold it to leave) where the browser lets a page ask for that.
+	function isFull() {
+		return document.fullscreenElement === stage || document.webkitFullscreenElement === stage;
+	}
+	function toggleFull() {
+		if (isFull()) {
+			(document.exitFullscreen || document.webkitExitFullscreen).call(document);
+			return;
+		}
+		const req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+		if (!req) {
+			return;
+		}
+		const p = req.call(stage, { navigationUI: 'hide' });
+		if (p && p.then) {
+			p.then(function () {
+				if (navigator.keyboard && navigator.keyboard.lock) {
+					navigator.keyboard.lock(['Escape']).catch(function () {});
+				}
+			}).catch(function () {});
+		}
+	}
+	function onFullChange() {
+		const full = isFull();
+		fullLabel.textContent = full ? 'Leave full screen' : 'Full screen';
+		if (!full && navigator.keyboard && navigator.keyboard.unlock) {
+			navigator.keyboard.unlock();
+		}
+		requestAnimationFrame(fit);
+		if (started) {
+			canvas.focus();
+		}
+	}
+	document.addEventListener('fullscreenchange', onFullChange);
+	document.addEventListener('webkitfullscreenchange', onFullChange);
+
+	document.getElementById('play').addEventListener('click', start);
+	document.getElementById('play-full').addEventListener('click', function () {
+		toggleFull();
+		start();
+	});
+	document.getElementById('full').addEventListener('click', function () {
+		toggleFull();
+		if (!started) {
+			start();
+		}
+	});
+	// the game's own keys and wheel stay in the game while it runs
+	stage.addEventListener('wheel', function (e) {
+		if (started) {
+			e.preventDefault();
+		}
+	}, { passive: false });
+	window.addEventListener('keydown', function (e) {
+		if (started && document.activeElement === canvas && [' ', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key)) {
+			e.preventDefault();
+		}
+	});
+	stage.addEventListener('pointerdown', function () {
+		if (started) {
+			canvas.focus();
+		}
+	});
+
+	if (hosted) {
+		start();                       // a friend's link: straight into the game
+	}
+}());
+</script>
+</body>
+</html>
+
